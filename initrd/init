@@ -306,7 +306,28 @@ for _d in /dev/[hmnsvx][dmrv][0-9a-z]*; do
 	ln -s "$_d" /dev/block/
 done
 
-ROOT=$(find_device "$ROOT")
+if [ 0"$DEBUG" -gt 0 ]; then
+	echo -e "\nType 'exit' to continue booting...\n"
+	debug_shell debug-pre
+fi
+
+[ -d "$VTOY_PATH" ] && export HAS_VTOY=1 _root=/dev/mapper/ventoy
+
+# Wait for ROOT to appear
+ROOTWAIT=${ROOTWAIT:-30} # Default to 30 sec
+for _s in $(seq 0 $ROOTWAIT); do
+	# If is booting from Ventoy GRUB2 Mode
+	if [ "$HAS_VTOY" = 1 ]; then
+		"$VTOY_PATH/hook/android/ventoy-disk.sh"
+	else
+		_root=$(find_device "$ROOT")
+	fi
+
+	[ -e "$_root" ] && break
+	sleep 1
+done
+export ROOT=$_root
+unset _root
 
 cd /
 # If there's no ROOT= specified, try to find one for 5 times
