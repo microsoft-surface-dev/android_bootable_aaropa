@@ -296,6 +296,7 @@ done
 if [ "$VTOY_PATH" ]; then
 	ISO=$(/ventoy/tool/vtoydump -f /ventoy/ventoy_os_param)
 	ISO=${ISO##*'#'}
+	export ISO
 fi
 
 if [ -z "$SRC" ]; then
