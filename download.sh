@@ -9,19 +9,11 @@ VERSION_FILE="version.txt"
 SCRIPT_DIR=$(dirname "$0")
 cd "$SCRIPT_DIR" || exit
 
-# Files to download
-FILES=(
-  "install.sfs"
-  "initrd_lib.tar.gz"
-  "grub-rescue.iso"
-  "boot_hybrid.img"
-)
-
 # Function to get the latest tag from GitHub API
 get_latest_version() {
-  if command -v curl &> /dev/null; then
+  if command -v curl &>/dev/null; then
     curl -s "$API_URL" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/'
-  elif command -v wget &> /dev/null; then
+  elif command -v wget &>/dev/null; then
     wget -qO- "$API_URL" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/'
   fi
 }
@@ -30,7 +22,7 @@ get_latest_version() {
 check_version() {
   echo "Checking for the latest version..."
   LATEST_VERSION=$(get_latest_version)
-  
+
   if [[ -z "$LATEST_VERSION" ]]; then
     echo "Warning: Could not determine the latest version from GitHub. Proceeding with download..."
     return 0
@@ -43,14 +35,14 @@ check_version() {
       exit 0
     fi
   fi
-  
+
   echo "New version found: $LATEST_VERSION (Current: ${LOCAL_VERSION:-None})"
 }
 
 # Function to update the version file
 update_version() {
   if [[ -n "$LATEST_VERSION" ]]; then
-    echo "$LATEST_VERSION" > "$VERSION_FILE"
+    echo "$LATEST_VERSION" >"$VERSION_FILE"
     echo "Updated $VERSION_FILE to $LATEST_VERSION."
   fi
 }
@@ -119,72 +111,74 @@ extract_initrd_lib() {
 
 # Function to display the help message
 show_help() {
-  cat << EOF
+  cat <<EOF
 Copyright (C) 2026 BlissLabs
 
 Usage: ./download.sh [OPTION]
 
 Options:
-  --initrd-only    Download and extract only the initrd_lib.tar.gz file.
-  --help           Show this help message and exit.
+  --initrd-only         Download and extract only the initrd_lib.tar.gz file.
+  --with-newinstaller   Download and extract excluding the install.sfs file.
+  --help                Show this help message and exit.
 EOF
 }
 
 # Handle the command line argument using a case statement
 case "$1" in
-  --help)
-    show_help
-    ;;
-  
-  --initrd-only)
-    # Check the version first
-    check_version
-
-    # Remove existing files before starting the download
-    remove_existing_files
-
-    # Download only initrd_lib.tar.gz
-    if command -v aria2c &> /dev/null; then
-      download_with_aria2 "initrd_lib.tar.gz"
-    else
-      download_with_wget "initrd_lib.tar.gz"
-    fi
-
-    extract_initrd_lib
-    
-    # Save the new version
-    update_version
-    echo "Script execution complete!"
-    ;;
-  
-  *)
-    # Check the version first
-    check_version
-
-    # Remove existing files before starting the download
-    remove_existing_files
-
-    # Check if aria2c is installed
-    if command -v aria2c &> /dev/null; then
-      echo "aria2c found, using aria2c for download."
-      for FILE in "${FILES[@]}"; do
-        download_with_aria2 "$FILE"
-      done
-    else
-      echo "aria2c not found, falling back to wget."
-      for FILE in "${FILES[@]}"; do
-        download_with_wget "$FILE"
-      done
-    fi
-
-    # Process the downloaded files
-    extract_grub_rescue_iso
-    move_install_sfs
-    extract_initrd_lib
-
-    # Save the new version
-    update_version
-    echo "Script execution complete!"
-    ;;
+--help) show_help && exit 0 ;;
+--initrd-only) export INITRD_ONLY=true ;;
+--with-newinstaller) export WITH_NEWINSTALLER=true ;;
 esac
+
+# Files to download
+FILES=(
+  "initrd_lib.tar.gz"
+)
+
+if [ -z "$INITRD_ONLY" ]; then
+  FILES+=(
+    "grub-rescue.iso"
+    "boot_hybrid.img"
+
+  )
+fi
+
+if [ -z "$WITH_NEWINSTALLER" ]; then
+  FILES+=(
+    "install.sfs"
+  )
+fi
+
+# Check the version first
+check_version
+
+# Remove existing files before starting the download
+remove_existing_files
+
+# Check if aria2c is installed
+if command -v aria2c &>/dev/null; then
+  echo "aria2c found, using aria2c for download."
+  for FILE in "${FILES[@]}"; do
+    download_with_aria2 "$FILE"
+  done
+else
+  echo "aria2c not found, falling back to wget."
+  for FILE in "${FILES[@]}"; do
+    download_with_wget "$FILE"
+  done
+fi
+
+# Process the downloaded files
+if [ -z "$INITRD_ONLY" ]; then
+  extract_grub_rescue_iso
+fi
+if [ -z "$WITH_NEWINSTALLER" ]; then
+  move_install_sfs
+fi
+extract_initrd_lib
+
+# Save the new version
+update_version
+echo "Script execution complete!"
+
 exit 0
