@@ -7,7 +7,9 @@ VERSION_FILE="version.txt"
 
 # Get the script's directory and change to it
 SCRIPT_DIR=$(dirname "$0")
-cd "$SCRIPT_DIR" || exit
+mkdir -p "$SCRIPT_DIR/../../prebuilts/aaropa"
+cd "$SCRIPT_DIR/../../prebuilts/aaropa" || exit
+
 
 # Function to get the latest tag from GitHub API
 get_latest_version() {
@@ -57,15 +59,15 @@ remove_existing_files() {
     fi
   done
 
-  # Remove initrd_lib and iso directories
-  if [[ -d "initrd_lib" ]]; then
-    echo "Removing existing directory: initrd_lib"
-    rm -rf initrd_lib
+  # Remove initrd/initrd and iso/iso directories
+  if [[ -d "initrd/initrd" ]]; then
+    echo "Removing existing directory: initrd/initrd"
+    rm -rf initrd/initrd
   fi
 
-  if [[ -d "iso" ]]; then
-    echo "Removing existing directory: iso"
-    rm -rf iso
+  if [[ -d "iso/iso" ]]; then
+    echo "Removing existing directory: iso/iso"
+    rm -rf iso/iso
   fi
 }
 
@@ -83,28 +85,37 @@ download_with_wget() {
   wget "$RELEASE_URL/download/$file"
 }
 
-# Function to extract grub-rescue.iso to the iso directory and delete the iso file
+# Function to extract grub-rescue.iso to the iso/iso directory and delete the iso file
 extract_grub_rescue_iso() {
-  echo "Extracting grub-rescue.iso to iso directory..."
-  mkdir -p iso
-  # Extract the contents of the ISO into the "iso" folder
-  7z x grub-rescue.iso -oiso
+  echo "Extracting grub-rescue.iso to iso/iso directory..."
+  mkdir -p iso/iso
+  # Extract the contents of the ISO into the "iso/iso" folder
+  7z x grub-rescue.iso -oiso/iso
   # Delete the ISO after extracting
   rm grub-rescue.iso
 }
 
-# Function to move install.sfs to the iso directory
+# Function to move install.sfs to the iso/iso directory
 move_install_sfs() {
-  echo "Moving install.sfs to iso directory..."
-  mv install.sfs iso/
+  echo "Moving install.sfs to iso/iso directory..."
+  mv install.sfs iso/iso/
+}
+
+# Function to move boot_hybrid.img to the iso directory
+move_boot_hybrid() {
+  echo "Moving boot_hybrid.img to iso directory..."
+  mkdir -p iso
+  mv boot_hybrid.img iso/
 }
 
 # Function to extract initrd_lib.tar.gz and move the content to the initrd folder
 extract_initrd_lib() {
   echo "Extracting initrd_lib.tar.gz..."
+  mkdir -p initrd
   tar -xzf initrd_lib.tar.gz
-  echo "Setting permissions for initrd_lib..."
-  chmod -R 755 initrd_lib/*
+  mv initrd_lib initrd/initrd
+  echo "Setting permissions for initrd/initrd..."
+  chmod -R 755 initrd/initrd/*
   # Remove the extracted tar.gz file
   rm -f initrd_lib.tar.gz
 }
@@ -171,6 +182,7 @@ fi
 # Process the downloaded files
 if [ -z "$INITRD_ONLY" ]; then
   extract_grub_rescue_iso
+  move_boot_hybrid
 fi
 if [ -z "$WITH_NEWINSTALLER" ]; then
   move_install_sfs
@@ -179,6 +191,36 @@ extract_initrd_lib
 
 # Save the new version
 update_version
+
+# Create Android.bp files
+echo "Creating Android.bp for initrd..."
+cat <<EOF > initrd/Android.bp
+aaropa_initrd {
+    name: "initrd.img",
+    os_title: "BlissOS",
+    ver: "15",
+}
+EOF
+
+echo "Creating Android.bp for iso..."
+cat <<EOF > iso/Android.bp
+aaropa_iso {
+    name: "aaropa_iso_target",
+    boot_hybrid: "boot_hybrid.img",
+    os_title: "BlissOS",
+    disklabel: "BOS15",
+EOF
+
+if [ -n "$WITH_NEWINSTALLER" ]; then
+cat <<EOF >> iso/Android.bp
+    use_newinstaller: true,
+EOF
+fi
+
+cat <<EOF >> iso/Android.bp
+}
+EOF
+
 echo "Script execution complete!"
 
 exit 0
